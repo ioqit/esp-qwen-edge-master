@@ -100,10 +100,6 @@ IN_PSRAM bool typing_pinyin = false; // 是否正在输入拼音标志
 
 IN_PSRAM String main_label_text_tmp;
 
-// struct edit_ta_info_t {
-// 	String text;
-// 	int16_t ta_history_pos = 0;
-// };
 
 struct chat_window_t{
 	String ta_text_save;
@@ -115,7 +111,7 @@ struct chat_window_t{
 	bool typing_double_quotes = false;   // 是否正在输入 一对双引号
 	std::vector<String> ta_history;  // ta历史记录
 	int16_t ta_history_pos = 0;     // 当前正在编辑/查看的ta历史记录 的位置(从前往后数，0为第一次记录), -1 表示最新
-	// std::vector<edit_ta_info_t> editing_ta_history;  // 正在编辑的 ta历史记录
+	std::vector<std::pair<String, int16_t>> editing_ta_history;  // 正在编辑的 ta历史记录
 };
 chat_window_t IN_PSRAM chat_windows[MAX_CHAT_WINDOW];
 

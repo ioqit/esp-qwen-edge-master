@@ -88,35 +88,35 @@ void my_loop(void *param) {
 			// 切换到新窗口 ta的状态
 			ta_tmp_recover();
 		} else if (proc_key == "$S11") { /* 向上查看ta记录 */
-			// if (lvgl_mux_lock()) { // 上锁
-			// 	current_window.editing_ta_history[ current_window.ta_history_pos ] = {
-			// 		lv_textarea_get_text(ta), current_window.ta_history_pos
-			// 	};
-			// 	lvgl_mux_unlock(); // 解锁
-			// }
-
-			if (current_window.ta_history_pos == -1) { // 如果为-1 则获取当前最后一项的位置
-				current_window.ta_history_pos = current_window.ta_history.size() - 1;
+			if (current_window.ta_history_pos == -1) {
+				// 如果为-1 且 当前ta与最新记录相同 则获取倒数第二项的位置（因为最新项(-1)与当前ta相同）
+				const char *ta_text = nullptr;
+				if (lvgl_mux_lock()) { // 上锁
+					ta_text = lv_textarea_get_text(ta);
+					lvgl_mux_unlock(); // 解锁
+				}
+				if (current_window.ta_history[ current_window.ta_history.size()-1 ] == ta_text) {
+					current_window.ta_history_pos = 
+							constrain( current_window.ta_history.size()-2, 0, current_window.ta_history.size() -1);
+				// 如果当 前ta与最新记录不同 则获取最新项的位置(-1)
+				} else {
+					current_window.ta_history_pos = current_window.ta_history.size() - 1;
+				}
 			} else {
 				current_window.ta_history_pos = 
 						constrain( current_window.ta_history_pos-1, 0, current_window.ta_history.size() -1);
 			}
 			// Serial.println("ta_history_pos: " + String(current_window.ta_history_pos));
 			
-			if (lvgl_mux_lock()) { // 上锁
-				lv_textarea_set_text(ta, 
-					current_window.ta_history[ current_window.ta_history_pos ].c_str()
-				);
+			if (!current_window.ta_history.empty()) { // 如果有记录
+				if (lvgl_mux_lock()) { // 上锁
+					lv_textarea_set_text(ta, 
+						current_window.ta_history[ current_window.ta_history_pos ].c_str()
+					);
+				}
 				lvgl_mux_unlock(); // 解锁
 			}
 		} else if (proc_key == "$S12") { /* 向下查看ta记录 */
-			// if (lvgl_mux_lock()) { // 上锁
-			// 	current_window.editing_ta_history[ current_window.ta_history_pos ] = {
-			// 		lv_textarea_get_text(ta), current_window.ta_history_pos
-			// 	};
-			// 	lvgl_mux_unlock(); // 解锁
-			// }
-
 			if (current_window.ta_history_pos == -1) { // 如果为-1 则获取当前最后一项的位置
 				current_window.ta_history_pos = current_window.ta_history.size() - 1;
 			} else {
@@ -147,8 +147,7 @@ void my_loop(void *param) {
 			} else { // 正常输入模式
 				send_key_to_ta(LV_KEY_BACKSPACE);
 			}
-		} else if (proc_key == "DEL") {
-			send_key_to_ta(LV_KEY_DEL);
+		} else if (proc_key == "DEL") { send_key_to_ta(LV_KEY_DEL);
 		} else if (proc_key == "ETR") {
 			if (typing_pinyin) { // 拼音输入模式: 将 拼音输入框 的文本 转移到 文本文本框(ta), 并关闭 拼音输入模式
 				if (lvgl_mux_lock()) { // 上锁
@@ -212,7 +211,7 @@ void my_loop(void *param) {
 		core0_loop_func();
 	}
 	main_label_set_text("循环已终止");
-	vTaskDelete(NULL); // 循环终止
+	vTaskDelete(nullptr); // 循环终止
 }
 
 // 根据情况发送不同请求
@@ -691,7 +690,7 @@ void hardware_init() {
 		}
 		while (true) vTaskDelay(10000 / portTICK_PERIOD_MS);
 	} else {
-		lv_disp_draw_buf_init(&draw_buf, disp_draw_buf, NULL, bufSize);
+		lv_disp_draw_buf_init(&draw_buf, disp_draw_buf, nullptr, bufSize);
 
 		// 初始化 display 设备
 		lv_disp_drv_init(&disp_drv);
@@ -839,7 +838,7 @@ void setup() {
 		my_loop,     // 任务函数
 		"my_loop",   // 任务名称
 		8000,        // 堆栈大小
-		NULL,         // 参数
+		nullptr,         // 参数
 		1,            // 优先级
 		&TASK_Handle_My_Loop,  // 任务句柄
 		0             // 核心编号 (0或1)
