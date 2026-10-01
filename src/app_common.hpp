@@ -42,8 +42,35 @@
 #include <utility>
 
 // ###################### API #########################
+#define USE_MULTI_MODAL 0 // 是否使用 多模态API(默认, 推荐), 否则 纯文本模态API(旧版)
+
+// 模型名称 与 API-URL (请求体格式 也互不相同)
+#if (USE_MULTI_MODAL)
+// 多模态
+#define API_ENDPOINT "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+#define MAIN_MODEL_NAME "qwen3.8-flash"   // 主模型，或用 qwen3.8-flash
+#define PROC_MODEL_NAME "qwen3.8-flash"   // 拼音预处理 模型(可选, 推荐弃用)
+#else
+// 纯文本模态
 #define API_ENDPOINT "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
-// 多模态API的URL, 请求体格式不一样: "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+#define MAIN_MODEL_NAME "qwen-plus"   // 主模型
+#define PROC_MODEL_NAME "qwen-plus"   // 拼音预处理 模型(可选, 推荐弃用)
+#endif
+
+
+// ===== Qwen-ASR 配置 =====
+#define QWEN_ASR_MODEL "qwen3-asr-flash-realtime"
+// 北京地域 baseUrl
+#define QWEN_ASR_BASE_URL "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+// 要识别的语言
+#define ASR_LANGUAGE "zh"
+
+// VAD模式设置: true=VAD模式（服务端自动断句），false=Manual模式（客户端控制断句）
+#define ENABLE_SERVER_VAD 0
+#if ENABLE_SERVER_VAD
+#define ASR_Threshold   0.8         // VAD 识别阈值
+#define ASR_Silence_Duration_MS 600 // 允许的静默持续时间(ms)
+#endif
 
 // ###################### 引脚定义 及 设置参数 #########################
 
@@ -64,12 +91,12 @@
 #define I2S_SD 12   // SD 引脚
 #define I2S_SCK 14  // SCK 引脚
 #define I2S_PORT I2S_NUM_0  // I2S 编号
-#define SAMPLE_RATE 16000   // 采样率
-#define MAX_RECORD_TIME_SECONDS 30    // 最大录音时间 (秒)
-#define BUFFER_SIZE (SAMPLE_RATE * MAX_RECORD_TIME_SECONDS)  // 缓冲区大小 (16bit 个数)
+#define I2S_SAMPLE_RATE 16000   // 采样率
+#define I2S_MAX_REC_SECONDS 30    // 最大录音时间 (秒)
+#define I2S_BUFFER_SIZE (I2S_SAMPLE_RATE * I2S_MAX_REC_SECONDS)  // 缓冲区大小 (16bit 个数)
 #define CHUNK_SIZE 2048
 #define WAVE_HEADER_SIZE 44
-#define BYTE_RATE (SAMPLE_RATE * 2) // 采样率 * 采样点字节数 (16bit = 2字节)
+#define BYTE_RATE (I2S_SAMPLE_RATE * 2) // 采样率 * 采样点字节数(16bit, 2字节)
 
 // LCD 引脚定义
 #define LCD_SCLK 39  // LCD 时钟 引脚
@@ -106,24 +133,6 @@
 
 // 用于检测 是否有按键 的文本
 #define MSG_NONE "__NO_MSG"
-
-// 模型名称
-#define MAIN_MODEL_NAME "qwen-plus"   // 主模型
-#define PROC_MODEL_NAME "qwen-plus"   // 拼音预处理 模型
-
-// ===== Qwen-ASR 配置 =====
-#define QWEN_ASR_MODEL "qwen3-asr-flash-realtime"
-// 北京地域 baseUrl
-#define QWEN_ASR_BASE_URL "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
-// 要识别的语言
-#define ASR_LANGUAGE "zh"
-
-// VAD模式设置: true=VAD模式（服务端自动断句），false=Manual模式（客户端控制断句）
-#define ENABLE_SERVER_VAD false
-#if ENABLE_SERVER_VAD
-#define ASR_Threshold   0.0         // VAD 识别阈值
-#define ASR_Silence_Duration_MS 400 // 允许的静默持续时间(ms)
-#endif
 
 
 // ############################## 提示词 #################################
@@ -242,7 +251,7 @@ void hardware_init();
  * @param role 消息角色 ("system", "user", "assistant")
  * @param content 消息内容
  */
-void addMessageToHistory(const char* role, const String content);
+void chatHistory_add_msg(const char* role, const String content);
 
 /**
  * @brief 构建并发送 HTTPS 请求到 API

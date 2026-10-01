@@ -104,7 +104,7 @@ IN_PSRAM String main_label_text_tmp;
 struct chat_window_t{
 	String ta_text_save;
 	String main_label_text_save;
-	std::vector<String> chatHistory; // 使用一个数组来存储 每一条JSON格式的消息(String) max:MAX_MESSAGES * 2 + 1
+	std::vector<std::pair<String, String>> chatHistory; // 使用一个数组来存储 每一条JSON格式的消息(String) max:MAX_MESSAGES * 2 + 1
 	uint32_t ta_pos = 0;
 	int16_t main_label_pos = 0;
 	bool typing_simple_quotes = false;   // 是否正在输入 一对单引号
@@ -397,7 +397,7 @@ void setupI2S() {
 
 	const i2s_config_t i2s_config = {
 		.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
-		.sample_rate = SAMPLE_RATE,
+		.sample_rate = I2S_SAMPLE_RATE,
 		.bits_per_sample = i2s_bits_per_sample_t(16),
 		.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
 		.communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S),
@@ -481,7 +481,7 @@ bool record_pcm(const char *record_key) {
 	setupI2S();
 
 	// 分配 pcm_data
-	pcm_data = (uint16_t *)ps_malloc(BUFFER_SIZE * sizeof(uint16_t));
+	pcm_data = (uint16_t *)ps_malloc(I2S_BUFFER_SIZE * sizeof(uint16_t));
 	if (!pcm_data) {
 		Serial.println("无法从 PSRAM 给 pcm_data 分配内存");
 		main_label_add_text("无法从 PSRAM 给 pcm_data 分配内存");
@@ -490,7 +490,7 @@ bool record_pcm(const char *record_key) {
 	
 	uint32_t start_time = millis();
 	// 开始循环录音
-	while (recordingSize < MAX_RECORD_TIME_SECONDS * SAMPLE_RATE) {
+	while (recordingSize < I2S_MAX_REC_SECONDS * I2S_SAMPLE_RATE) {
 		esp_err_t err = i2s_read(I2S_PORT, pcm_data + recordingSize, CHUNK_SIZE * sizeof(uint16_t), &bytes_read, portMAX_DELAY);
 		if (err != ESP_OK) {
 			Serial.println("I2S Read fail: 0x" + String(err, 16));
@@ -559,7 +559,7 @@ void record_wav(const char *record_key) {
 			
 			// 2. 准备 44 字节的 WAV 文件头 (WAVE_HEADER_SIZE 通常定义为 44)
 			char wav_header[WAVE_HEADER_SIZE];
-			generate_wav_header(wav_header, pcm_byte_size, SAMPLE_RATE);
+			generate_wav_header(wav_header, pcm_byte_size, I2S_SAMPLE_RATE);
 
 			// 3. 写入 WAV 文件头
 			if (spi_mux_lock()) {
@@ -802,7 +802,7 @@ void asr_send(uint16_t* pcm_data, uint32_t size) {
 	
 	tmp_doc["session"]["modalities"].add("text");
 	tmp_doc["session"]["input_audio_format"] = "pcm";
-	tmp_doc["session"]["sample_rate"] = SAMPLE_RATE;
+	tmp_doc["session"]["sample_rate"] = I2S_SAMPLE_RATE;
 	
 	tmp_doc["session"]["input_audio_transcription"]["language"] = ASR_LANGUAGE;
 	
@@ -888,7 +888,7 @@ void asr_send(uint16_t* pcm_data, uint32_t size) {
  * @param role 消息角色 ("system", "user", "assistant")
  * @param content 消息内容
  */
-void addMessageToHistory(const char* role, const String content) {
+void chatHistory_add_msg(const char* role, const String content) {
     // 如果历史记录已满，则移除最早的一条用户和助手消息
     if (current_window.chatHistory.size() >= (MAX_MESSAGES * 2 + 1)) {
 		current_window.chatHistory.erase(
@@ -898,7 +898,7 @@ void addMessageToHistory(const char* role, const String content) {
     }
     // 将消息以JSON字符串的形式存入数组
     current_window.chatHistory.push_back(
-		String("{\"role\":\"") + role + "\",\"content\":\"" + content + "\"}"
+		{role, content}
 	);
 }
 
@@ -944,37 +944,61 @@ int8_t getAPIanswer(const char* _SYSTEM_PROMPT, const String& _userPrompt, const
     http.addHeader("Authorization", "Bearer " apiKey);
 
 	// --- 构建请求体 ---
-	JsonDocument tmp_doc;
-	tmp_doc["model"] = _MAIN_MODEL_NAME;
+	JsonDocument tmp_api_doc;
+	tmp_api_doc["model"] = _MAIN_MODEL_NAME;
 
 	if (useHistory) {
 		// 如果是第一次对话，先加入系统提示词
 		if (current_window.chatHistory.empty()) {
-			addMessageToHistory("system", _SYSTEM_PROMPT);
+			chatHistory_add_msg("system", _SYSTEM_PROMPT);
 		}
 		
 		// 加入用户当前的问题
-		addMessageToHistory("user", _userPrompt);
+		chatHistory_add_msg("user", _userPrompt);
 
-		JsonDocument msgDoc;
 		// 将历史记录中的每一条消息解析并添加到JSON数组中
-		for (String tmp : current_window.chatHistory) {
-			DeserializationError error = deserializeJson(msgDoc, tmp);
-			if (!error) tmp_doc["input"]["messages"].add(msgDoc.as<JsonObject>());
+		for (const auto& msg_pair : current_window.chatHistory) {
+				JsonObject msg = tmp_api_doc["input"]["messages"].add<JsonObject>();
+				msg["role"] = msg_pair.first;
+			#if (USE_MULTI_MODAL)
+				msg["content"][0]["text"] = msg_pair.second;
+			#else
+				msg["content"] = msg_pair.second;
+			#endif
 		}
 	} else {
-		JsonDocument msgDoc;
-		msgDoc["role"] = "system";
-		msgDoc["content"] = _SYSTEM_PROMPT;
-		tmp_doc["input"]["messages"].add(msgDoc.as<JsonObject>());
-		msgDoc["role"] = "user";
-		msgDoc["content"] = _userPrompt;
-		tmp_doc["input"]["messages"].add(msgDoc.as<JsonObject>());
+			tmp_api_doc["input"]["messages"][0]["role"] = "system";
+			tmp_api_doc["input"]["messages"][1]["role"] = "user";
+		#if (USE_MULTI_MODAL) // 多模态API格式
+			tmp_api_doc["input"]["messages"][0]["content"][0]["text"] = _SYSTEM_PROMPT;
+			tmp_api_doc["input"]["messages"][1]["content"][0]["text"] = _userPrompt;
+		#else // 纯文本模态API格式
+			tmp_api_doc["input"]["messages"][0]["content"] = _SYSTEM_PROMPT;
+			tmp_api_doc["input"]["messages"][1]["content"] = _userPrompt;
+
+			// JsonObject msg = tmp_api_doc["input"]["messages"].add<JsonObject>();
+			// msg["role"] = "system";
+			// msg["content"] = _SYSTEM_PROMPT;
+
+			// msg = tmp_api_doc["input"]["messages"].add<JsonObject>();
+			// msg["role"] = "user";
+			// msg["content"] = _userPrompt;
+			
+			// 旧-1
+			// JsonDocument msgDoc;
+			// msgDoc["role"] = "system";
+			// msgDoc["content"] = _SYSTEM_PROMPT;
+			// tmp_api_doc["input"]["messages"].add(msgDoc.as<JsonObject>());
+			// msgDoc.clear();
+			// msgDoc["role"] = "user";
+			// msgDoc["content"] = _userPrompt;
+			// tmp_api_doc["input"]["messages"].add(msgDoc.as<JsonObject>());
+		#endif
 	}
 
     // 将构建好的JSON文档序列化为字符串
     String jsonPayload;
-    serializeJson(tmp_doc, jsonPayload);
+    serializeJson(tmp_api_doc, jsonPayload);
     Serial.println("开始发送POST请求, 请求体: ");
 	Serial.println(jsonPayload);
    
@@ -988,13 +1012,13 @@ int8_t getAPIanswer(const char* _SYSTEM_PROMPT, const String& _userPrompt, const
 	if (httpResponseCode > 0){
 		if (httpResponseCode == 200) {
 			// 解析 JSON 响应
-			tmp_doc.clear();
-            DeserializationError error = deserializeJson(tmp_doc, response);
+			tmp_api_doc.clear();
+            DeserializationError error = deserializeJson(tmp_api_doc, response);
 
             if (!error) {
-                const char* aiContent = tmp_doc["output"]["text"];
+                const char* aiContent = tmp_api_doc["output"]["text"];
 				// 将AI的回复也加入历史记录
-				if (useHistory) addMessageToHistory("assistant", aiContent);
+				if (useHistory) chatHistory_add_msg("assistant", aiContent);
 
                 _response = aiContent;
                 return 0;
@@ -1033,7 +1057,7 @@ int8_t getAPIanswer(const char* _SYSTEM_PROMPT, const String& _userPrompt, const
 // 重置对话历史
 void reset_chat_history() {
     current_window.chatHistory.clear();
-	std::vector<String>().swap(current_window.chatHistory);
+	std::vector<std::pair<String, String>>().swap(current_window.chatHistory);
 }
 
 
