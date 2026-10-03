@@ -1,0 +1,21 @@
+[submodule "lib/StreamHTTPClient"]
+	path = lib/StreamHTTPClient
+	url = https://gh-proxy.org/https://github.com/ioqite/StreamHTTPClient
+[submodule "lib/ArduinoJson"]
+	path = lib/ArduinoJson
+	url = https://gh-proxy.org/https://github.com/bblanchon/ArduinoJson
+[submodule "lib/Arduino_GFX"]
+	path = lib/Arduino_GFX
+	url = https://gh-proxy.org/https://github.com/moononournation/Arduino_GFX
+[submodule "lib/lvgl"]
+	path = lib/lvgl
+	url = https://gh-proxy.org/https://github.com/lvgl/lvgl
+[submodule "lib/FastIMU"]
+	path = lib/FastIMU
+	url = https://gh-proxy.org/https://github.com/LiquidCGS/FastIMU
+[submodule "lib/ArduinoWebsockets-new"]
+	path = lib/ArduinoWebsockets-new
+	url = https://gh-proxy.org/https://github.com/ioqite/ArduinoWebsockets
+[submodule "lib/ArduinoCalc"]
+	path = lib/ArduinoCalc
+	url = https://gh-proxy.org/https://github.com/ioqite/ArduinoCalc
